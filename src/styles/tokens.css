@@ -1,0 +1,25 @@
+:root {
+  /* surfaces */
+  --paper: #f4efe6;
+  --paper-2: #ece4d6;
+  --card: #fffdf8;
+  --ink: #16140f;
+  --ink-soft: #4a463c;
+  --ink-faint: #8c8576;
+  --line: #d9d0bf;
+
+  /* accents */
+  --acid: #c6f24e;      /* savings / cheap */
+  --acid-deep: #9fcf1f;
+  --coral: #ff6b4a;     /* original / expensive */
+  --coral-deep: #e8482a;
+
+  /* fonts */
+  --f-display: 'Instrument Serif', Georgia, serif;
+  --f-body: 'Hanken Grotesk', system-ui, sans-serif;
+  --f-mono: 'Geist Mono', ui-monospace, monospace;
+
+  /* shape */
+  --r: 18px;
+  --shadow: 0 18px 40px -22px rgba(22, 20, 15, 0.45);
+}
