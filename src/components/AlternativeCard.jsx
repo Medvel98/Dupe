@@ -29,8 +29,8 @@ export default function AlternativeCard({ alt, index }) {
         {(() => {
           // Build a reliable Google Shopping search link instead of using
           // the model-generated URL (which is often hallucinated and 404s).
-          const query = encodeURIComponent(`${alt.name}${alt.store ? ' ' + alt.store : ''}`)
-          const shopUrl = `https://www.google.com/search?tbm=shop&q=${query}`
+          const query = encodeURIComponent(`buy ${alt.name}${alt.store ? ' ' + alt.store : ''}`)
+          const shopUrl = `https://www.google.com/search?q=${query}`
           return (
             <a className="alt-link" href={shopUrl} target="_blank" rel="noopener noreferrer">
               Shop <ArrowIcon />
