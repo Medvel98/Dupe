@@ -5,19 +5,23 @@ export function splitDataUrl(dataUrl) {
   return { mimeType: m[1], base64: m[2] }
 }
 
-export async function analyzeImage(dataUrl) {
-  const { mimeType, base64 } = splitDataUrl(dataUrl)
+async function postAnalyze(body) {
   const res = await fetch('/api/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64: base64, mimeType }),
+    body: JSON.stringify(body),
   })
   let data
-  try {
-    data = await res.json()
-  } catch {
-    throw new Error('The server returned an unexpected response.')
-  }
+  try { data = await res.json() } catch { throw new Error('The server returned an unexpected response.') }
   if (!res.ok) throw new Error(data?.error || 'Analysis failed.')
   return data
+}
+
+export async function analyzeImage(dataUrl) {
+  const { mimeType, base64 } = splitDataUrl(dataUrl)
+  return postAnalyze({ imageBase64: base64, mimeType })
+}
+
+export async function analyzeProductName(productName) {
+  return postAnalyze({ productName })
 }

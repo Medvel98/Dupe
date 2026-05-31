@@ -3,26 +3,39 @@ import { GoogleGenAI } from '@google/genai'
 const API_KEY = process.env.GEMINI_API_KEY
 const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null
 
-const PROMPT = `You are a savvy shopping assistant that finds cheaper alternatives ("dupes") for products.
+const JSON_SHAPE = `{
+  "product": { "name": string, "category": string, "estPrice": number, "currency": string, "note": string },
+  "alternatives": [
+    { "name": string, "price": number, "currency": string, "store": string, "savingsPct": number, "why": string }
+  ]
+}
+Rules:
+- prices are numbers only (no currency symbols). currency is a 3-letter ISO code like "USD".
+- savingsPct is an integer percentage saved versus the original estPrice.
+- "why" is one short sentence on why it's a good cheaper swap.
+- If you cannot identify the product, set product.name to "Unknown" and return an empty alternatives array.`
+
+const IMAGE_PROMPT = `You are a savvy shopping assistant that finds cheaper alternatives ("dupes") for products.
 
 Look at the product in the image. Then:
 1. Identify the product as specifically as you can (brand + model if visible).
 2. Use web search to find its current typical retail price.
-3. Use web search to find 3 to 5 REAL, currently-available cheaper alternatives that serve the same purpose. Prefer well-known products and retailers. Each must be genuinely cheaper than the original.
-4. For each alternative include a real product/store URL you found via search.
+3. Use web search to find 3 to 5 REAL, currently-available cheaper alternatives. Prefer well-known retailers. Each must genuinely cost less than the original.
 
 Respond with ONLY a JSON object (no prose, no markdown fences) of exactly this shape:
-{
-  "product": { "name": string, "category": string, "estPrice": number, "currency": string, "note": string },
-  "alternatives": [
-    { "name": string, "price": number, "currency": string, "store": string, "url": string, "savingsPct": number, "why": string }
-  ]
+${JSON_SHAPE}`
+
+function textPrompt(productName) {
+  return `You are a savvy shopping assistant that finds cheaper alternatives ("dupes") for products.
+
+The product to research is: "${productName}"
+
+1. Use web search to find its current typical retail price.
+2. Use web search to find 3 to 5 REAL, currently-available cheaper alternatives. Prefer well-known retailers. Each must genuinely cost less than the original.
+
+Respond with ONLY a JSON object (no prose, no markdown fences) of exactly this shape:
+${JSON_SHAPE}`
 }
-Rules:
-- prices are numbers only (no currency symbols). currency is a 3-letter code like "USD".
-- savingsPct is an integer percentage saved versus the original estPrice.
-- "why" is one short sentence on why it's a good cheaper swap.
-- If you cannot identify the product, set product.name to "Unknown" and return an empty alternatives array.`
 
 function extractJson(text) {
   if (!text) return null
@@ -43,7 +56,6 @@ function normalize(data) {
       price: Number(a.price) || 0,
       currency: String(a.currency || product.currency || 'USD'),
       store: String(a.store || ''),
-      url: typeof a.url === 'string' ? a.url : '',
       savingsPct: Number(a.savingsPct) || 0,
       why: String(a.why || ''),
     }))
@@ -60,31 +72,38 @@ function normalize(data) {
   }
 }
 
+async function callGemini(parts) {
+  return ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: [{ role: 'user', parts }],
+    config: { tools: [{ googleSearch: {} }], temperature: 0.4 },
+  })
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-
   if (!ai) return res.status(500).json({ error: 'Server is missing GEMINI_API_KEY.' })
 
-  const { imageBase64, mimeType } = req.body || {}
-  if (!imageBase64) return res.status(400).json({ error: 'imageBase64 is required.' })
+  const { imageBase64, mimeType, productName } = req.body || {}
+
+  // Must have either an image or a product name (from barcode lookup)
+  if (!imageBase64 && !productName) {
+    return res.status(400).json({ error: 'Provide imageBase64 or productName.' })
+  }
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{
-        role: 'user',
-        parts: [
+    const parts = imageBase64
+      ? [
           { inlineData: { mimeType: mimeType || 'image/jpeg', data: imageBase64 } },
-          { text: PROMPT },
-        ],
-      }],
-      config: { tools: [{ googleSearch: {} }], temperature: 0.4 },
-    })
+          { text: IMAGE_PROMPT },
+        ]
+      : [{ text: textPrompt(productName) }]
 
+    const response = await callGemini(parts)
     const parsed = extractJson(response.text || '')
     if (!parsed) return res.status(502).json({ error: 'Could not read a result from the model. Try a clearer photo.' })
 
