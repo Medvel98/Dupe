@@ -30,6 +30,15 @@ export default function Capture({ onImage }) {
   const streamRef = useRef(null)
   const fileRef = useRef(null)
 
+  // Attach stream to video element whenever we enter camera mode
+  useEffect(() => {
+    if (mode === 'camera' && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(() => {})
+    }
+  }, [mode])
+
+  // Stop stream on unmount
   useEffect(() => () => stopStream(), [])
 
   function stopStream() {
@@ -43,18 +52,11 @@ export default function Capture({ onImage }) {
     setCamError('')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
         audio: false,
       })
       streamRef.current = stream
-      setMode('camera')
-      // attach after render
-      requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.play().catch(() => {})
-        }
-      })
+      setMode('camera') // useEffect above will attach stream after render
     } catch {
       setCamError('Camera unavailable — upload a photo instead.')
       setMode('idle')
@@ -64,7 +66,7 @@ export default function Capture({ onImage }) {
   function snap() {
     const video = videoRef.current
     if (!video) return
-    const w = video.videoWidth || 720
+    const w = video.videoWidth || 1280
     const h = video.videoHeight || 960
     const canvas = document.createElement('canvas')
     canvas.width = w
@@ -79,6 +81,8 @@ export default function Capture({ onImage }) {
   async function handleFiles(files) {
     const file = files?.[0]
     if (!file || !file.type.startsWith('image/')) return
+    // reset so same file can be re-selected
+    if (fileRef.current) fileRef.current.value = ''
     const dataUrl = await fileToDataUrl(file)
     onImage(dataUrl)
   }
@@ -87,7 +91,7 @@ export default function Capture({ onImage }) {
     return (
       <div className="hero">
         <div className="cam-wrap">
-          <video ref={videoRef} playsInline muted />
+          <video ref={videoRef} playsInline muted autoPlay />
         </div>
         <div className="cam-controls">
           <button className="btn btn-ghost" onClick={() => { stopStream(); setMode('idle') }}>Cancel</button>
@@ -112,11 +116,11 @@ export default function Capture({ onImage }) {
       <div className="cta-stack">
         <button className="btn btn-primary" onClick={startCamera}><CameraIcon /> Use camera</button>
         <button className="btn btn-accent" onClick={() => fileRef.current?.click()}><UploadIcon /> Upload a photo</button>
+        {/* No capture="environment" — that attribute hijacks the button to open camera on mobile */}
         <input
           ref={fileRef}
           type="file"
           accept="image/*"
-          capture="environment"
           hidden
           onChange={(e) => handleFiles(e.target.files)}
         />
